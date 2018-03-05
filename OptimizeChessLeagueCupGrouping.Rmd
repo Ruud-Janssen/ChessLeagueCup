@@ -1,10 +1,10 @@
 ---
 title: "Chess League Cup Pairings in the Netherlands"
-output: html_document
+output: rmarkdown::github_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE, fig.align = "left")
 ```
 
 In this article we investigate the pairings for the Chess League Cup in the Netherlands.
@@ -295,13 +295,60 @@ model4 <- MIPModel() %>%
   add_constraint(sum_expr(x[i, j] * weightLevel[i], i = 1:n) <= maxTotalWeight * u[j], j = 1:cl)
 
 #Lets inspect the model created
-model4
+# model4
 
 ```
 Now we run the model using the glpk solver
 
 ```{r}
-result4 <- solve_model(model4, with_ROI(solver = "glpk", verbose = TRUE))
+result4 <- solve_model(model4, with_ROI(solver = "glpk", verbose = FALSE))
+
+#Verbose = TRUE RESULTS:
+#
+# <SOLVER MSG>  ----
+# GLPK Simplex Optimizer, v4.47
+# 362 rows, 6298 columns, 31490 non-zeros
+#       0: obj =  0.000000000e+000  infeas = 9.700e+001 (94)
+# *   253: obj =  1.236354690e+012  infeas = 2.274e-015 (1)
+# *   500: obj =  8.712538744e+011  infeas = 0.000e+000 (0)
+# *  1000: obj =  4.987494456e+010  infeas = 6.297e-016 (0)
+# *  1170: obj =  3.919634122e+010  infeas = 4.441e-017 (0)
+# OPTIMAL SOLUTION FOUND
+# GLPK Integer Optimizer, v4.47
+# 362 rows, 6298 columns, 31490 non-zeros
+# 6298 integer variables, all of which are binary
+# Integer optimization begins...
+# +  1170: mip =     not found yet >=              -inf        (1; 0)
+# +  2031: >>>>>  2.471864739e+011 >=  4.263027948e+010  82.8% (62; 0)
+# +  3528: mip =  2.471864739e+011 >=  4.554063146e+010  81.6% (178; 9)
+# +  3992: >>>>>  1.727665160e+011 >=  4.554063146e+010  73.6% (215; 9)
+# +  4617: mip =  1.727665160e+011 >=  4.795663865e+010  72.2% (233; 94)
+# +  5276: mip =  1.727665160e+011 >=  4.966066692e+010  71.3% (296; 96)
+# +  6340: >>>>>  1.696382545e+011 >=  5.055920563e+010  70.2% (391; 97)
+# +  8332: mip =  1.696382545e+011 >=  6.906003480e+010  59.3% (464; 141)
+# + 10888: mip =  1.696382545e+011 >=  7.399658740e+010  56.4% (555; 154)
+# + 14071: mip =  1.696382545e+011 >=  8.485198381e+010  50.0% (654; 175)
+# + 16789: mip =  1.696382545e+011 >=  8.858068210e+010  47.8% (748; 186)
+# + 19080: mip =  1.696382545e+011 >=  9.103993846e+010  46.3% (880; 196)
+# + 21765: mip =  1.696382545e+011 >=  9.421738460e+010  44.5% (1015; 209)
+# + 23916: >>>>>  1.684059921e+011 >=  9.510877569e+010  43.5% (1152; 216)
+# + 26363: mip =  1.684059921e+011 >=  9.623257085e+010  42.9% (1265; 243)
+# Time used: 60.0 secs.  Memory used: 12.4 Mb.
+# + 28563: mip =  1.684059921e+011 >=  9.675488984e+010  42.5% (1368; 252)
+# + 28975: >>>>>  1.639851247e+011 >=  9.675488984e+010  41.0% (1394; 252)
+# + 31055: mip =  1.639851247e+011 >=  9.711484369e+010  40.8% (1457; 337)
+# + 32954: mip =  1.639851247e+011 >=  9.763099726e+010  40.5% (1569; 341)
+# ....
+# +407391: mip =  1.475556012e+011 >=  1.445187564e+011   2.1% (1537; 14992)
+# +409331: mip =  1.475556012e+011 >=  1.447550892e+011   1.9% (1379; 15430)
+# +412376: mip =  1.475556012e+011 >=  1.453694164e+011   1.5% (1063; 16520)
+# +414237: mip =  1.475556012e+011 >=  1.458631693e+011   1.1% (800; 17603)
+# +416131: mip =  1.475556012e+011 >=  1.464166437e+011   0.8% (548; 18778)
+# +417674: mip =  1.475556012e+011 >=  1.468899638e+011   0.5% (276; 20493)
+# +418064: >>>>>  1.472613739e+011 >=  1.471252795e+011 < 0.1% (188; 21463)
+# +418316: mip =  1.472613739e+011 >=     tree is empty   0.0% (0; 24309)
+# INTEGER OPTIMAL SOLUTION FOUND
+# <!SOLVER MSG> ----
 ```
 ```{r}
 #choosen centroid locations
