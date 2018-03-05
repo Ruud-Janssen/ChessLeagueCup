@@ -1,0 +1,16 @@
+base
+ompr
+ROI.plugin.glpk
+ompr.roi
+ROI
+geosphere
+tidyr
+knitr
+ggplot2
+ggrepel
+ggmap
+magrittr
+plyr
+dplyr
+stringr
+bindrcpp

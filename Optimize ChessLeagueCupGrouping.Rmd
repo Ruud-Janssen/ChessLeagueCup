@@ -1,0 +1,390 @@
+---
+title: "Chess League Cup Pairings in the Netherlands"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Chess League Cup Explanation
+
+As with football there is a League Cup and the regular national competition in the Netherlands. Though the regular competition is a single round robin event of 10 teams. This leaves plenty of time to play individual tournaments or multiple foreign league competitions. In the regular competition you play with 10 players in the highest 2 classes and with 8 players per team in the lower classes. 
+
+In the League Cup you play with 4 players often during the week on the regular chess club evening of the home playing team. The League cup is based on a knockout system where around 100 teams participate. The teams are divided in 4 groups and the winners of each group go to the finals where the cup winner will be decided.
+
+The 4 groups are divided in equal sized groups based on strength (based on level in national competition) and secondly on distance. So, one group in the North, East, West and South, right?
+Well not exactly, the Dutch chess teams are more or less divided according to population density in the country.
+The league cup games are played in the evening and can take over 4 hours. Short travelling distances are preferable.
+The teams in the North, South and East have to travel a lot as these areas are too small to form a single group. And yes, I happen to live and play chess in one of these regions...
+
+
+## The Problem
+
+But the distance penalty seemed to be a bit unfair with long driving's (ok perspective of the Netherlands...). 
+Of course an idea is to make 8 groups instead of 4 groups. Then play 3 games in the final weekend or 2 games in the final weekend and one battle with a neighboring group winner to qualify for the finals.
+The latter solution makes sense, but there are traditions for a reason.
+
+Enough talk, let’s see whether the solution was optimized or whether my gut feeling was correct.
+
+What do we need:
+
+-	the clubs and their playing venue location
+
+-	the national competition league of the club (for strength assessment)
+
+-	the average rating of the teams (for strength assessment)
+
+-	the group in the League Cup
+
+
+As usually I work with the Microsoft stack, that’s where we start.
+
+The first thing is to get the data of the chess clubs and optionally put it in a database, sql server.
+Unfortunately there is no webservice or something to get this data easily. I might could have asked for this data but I extracted the data from the website (at that point still [schaakbond.nl](www.schaakbond.nl) instead of the new website [schaken.nl](www.schaken.nl)). 
+
+I did some data wrangling/munging, sounds cooler than the just plain good old ETL/ELT. In this case it was mainly fixing small errors from the parsing. In the end I extracted the addresses of the 150 clubs in the national league and I looked up the addresses of the 10 champions from the regions. These are all the potential clubs which can participate in the league cup, though second teams are excluded.
+
+![an image caption Source: Address Chessclub](images/AddressChessclub.png) 
+**Address information: Clubname, Clubcode, Street, Postal code, City and Province**
+
+
+In the next figure the team information is presented. 
+
+:     Team information
+
++---------------+--------------------------------------------------+
+| Dutch name    | Translation                                      |
++===============+==================================================+
+| Klasse         National league                                  
++---------------+--------------------------------------------------+
+| Beker			     Cup group                                        
++---------------+--------------------------------------------------+
+| Team			     TeamName (2 indicates second team of the club)   
++---------------+--------------------------------------------------+
+| KNSB and FIDE  Average strength of the team                     
++---------------+--------------------------------------------------+
+| KNSB   		     National rating                         
++---------------+--------------------------------------------------+
+| FIDE           International rating                    
++---------------+--------------------------------------------------+
+| Gem. leeftijd  Average age of the team.                          
+|      			     As a BI-er I am very well aware of our habit     
+|      			     to add data in the pipeline nobody  needs...     
++---------------+--------------------------------------------------+
+ 
+
+![an image caption Source: Information Chessclub](images/InformationChessclub.png)  
+**Chessclub information**
+
+Not every team participates in the league cup, therefor the blanks. There can be different reasons for not participating.
+
+The next step is to calculate the location (latitude, longitude) of the club based on the playing venue address of the club. I use the method illustrated by Alastair Aitchison in his book *Pro Spatial with SQL Server 2012*, <https://alastaira.wordpress.com/2012/05/04/geocoding-in-sql-server-with-the-bing-maps-locations-api/>.
+So a typical call to get the sql server geography object looks like this.
+
+![an image caption Source: GeoCode SQL Server using Bingmaps](images/GeoCodeSQLServer.png)
+**SQL Server Management Studio, with a call to the GeoCode function**
+
+There are different ways to get the latitude longitude coordinate, but it is not our intention to discuss this in detail.
+Now we import the data in Power BI Desktop and create some initial visualization to get a rough idea about the data.
+![an image caption Source: Power BI Initital Exploratory Data Analysis](images/PowerBI_InitialEDA.png) 
+**Power BI initial EDA**
+
+The brief EDA gave some clues that improvement does not seem impossible. 
+On the left visualization we see the actual 4 league cup groups as played in the season 2016-2017.
+In the middle we see two versions of the k-means clustering with 4 and 8 clusters (groups), using R within Power BI. In this example strength and equal sized cluster are not considered, but it gives an idea about the data. On the right visualizations we see the division of strength over the club locations. The bottom right visualization is based on FIDE rating, while the upper visualization is based on the national league class.
+
+Once again, my personal annoyance was that each year we play in group south, including some pretty far western clubs, while living in the east.
+More concretely, is the league cup already the optimal solution or is there a solution which is better in all relevant aspects.
+So what should we take into consideration:
+
+- average strength (based on national league class)
+
+- group size (equal length over the groups)
+
+- avg distance and avg squared distance in the group
+
+
+Unfortunately, there is no magic button in Power BI to get the answer for this problem.
+Clustering algorithms have a different purpose, similarity, and cannot be used for this problem.
+
+The solution can be found in linear optimization type of problems. 
+Math is certainly not my expertise area, but let’s see whether we can come up with some results.
+As a Microsoft guy nowadays you need to be savvy with R, so lets fire up R studio!
+
+
+I found a nice looking package from Dirk Schumacher, *OMPR*, Optimization Modelling Package.
+More information can be found [here](https://dirkschumacher.github.io/ompr/index.html).
+In general in works a bit like the package *Caret*, for Regression and Classification type of problems. 
+It provides a universal front-end for many different optimization algorithms.
+
+
+## R
+
+After importing the data in R, we do a little preprocessing before building the model.
+In the specific year we have 93 clubs participating in the league cup.
+We set the number of groups to 4, and the size of the group to a minimum of 23 clubs and a maximum of 24 clubs. We use the same weight setting as in Power BI. But we add the maximum and minimum weight for a group to ensure equal strength groups.
+
+At development time I used a subset, for example 20 clubs and 4 groups, to quickly test the solution. 
+I played a bit with the *OMPR* package and tried different approaches to solve the problem.
+
+Some less successful attempts have been tried with different models. They are within R script *Optimize ChessLeagueCupGroupings.R* in GitHub. One of the attempts was the famous TSP, Traveling Salesman Problem. It wasn’t particularly successful as the problem space grew massively. But the idea was to have 4 chains of clubs equal in size and strength.
+Unfortunately, testing it with just 20 cities already took too long, while with 10 cities and 2 groups it was ok.
+
+Here we look into the final model. But first the preprocessing.
+```{r message = FALSE, warning = FALSE}
+library(ompr)
+library(ROI.plugin.glpk)
+library(ompr.roi)
+library(ROI)
+library(geosphere)
+library(tidyr)
+library(knitr)
+library(ggplot2)
+library(ggrepel)
+library(ggmap)
+```
+
+## Preprocessing
+
+In the preprocessing we load the data from the already geocoded chessclubs, csv file, and set a few variables for the groupings.
+
+```{r message = FALSE, warning = FALSE}
+source("Preprocessing ChessLeagueCup.R")
+```
+
+Create a map of the Netherlands (once).
+
+```{r cache = TRUE, message = FALSE, warning = FALSE}
+mapNL <- get_googlemap('Netherlands', zoom = 7)
+```
+
+## Optimization Model
+
+As a reminder we need to take into account similar strength and equal group sizes and reduce the overall distance between the clubs assigned to the 4 groups.
+
+For our final solution a number of random points are choosen within the studyarea (added with the best points from previous runs).
+Then we choose the 4 most optimized points to create the 4 groups with a minimal (squared) distance from the clubs to the grouppoint (centroid approximation). Taking into account the constraints for equal strength and equal group sizes.
+The proposed solution is related to the following type of problem: finding the most optimal warehouse location to serve customers.
+
+```{r}
+#Study area extent based on locations of the chessclub
+minLat <- min(ChessClubs20162017$Lat)
+maxLat <- max(ChessClubs20162017$Lat)
+minLong <- min(ChessClubs20162017$Long)
+maxLong <- max(ChessClubs20162017$Long)
+
+deltaLat <- maxLat - minLat
+deltaLong <- maxLong - minLong
+
+centroidLoc <- 96
+
+set.seed(12345)
+centroid_locations <- data.frame(
+  IdCentroid = 1:centroidLoc,
+  LongCentroid = runif(centroidLoc) * deltaLong + minLong, #x
+  LatCentroid = runif(centroidLoc) * deltaLat + minLat #y
+)
+
+#Add top centroid from previous run
+df1 <- data.frame(IdCentroid = centroidLoc + 1, LongCentroid = 4.933878, LatCentroid = 52.38954)
+df2 <- data.frame(IdCentroid = centroidLoc + 2, LongCentroid = 6.404083, LatCentroid = 52.64013)
+df3 <- data.frame(IdCentroid = centroidLoc + 3, LongCentroid = 5.487537, LatCentroid = 51.88348)
+df4 <- data.frame(IdCentroid = centroidLoc + 4, LongCentroid = 4.409887, LatCentroid = 51.88037)
+
+centroid_locations <- rbind(centroid_locations, df1)
+centroid_locations <- rbind(centroid_locations, df2)
+centroid_locations <- rbind(centroid_locations, df3)
+centroid_locations <- rbind(centroid_locations, df4)
+
+#it was a bit too ambitious to have the study area crossing the North Sea, Belgium and Germany.
+#Lets trim it a bit more
+centroid_locations <- centroid_locations %>%
+  filter(LongCentroid > 4.1) %>%
+  filter(LongCentroid < 6.6) %>%
+  filter(LatCentroid > 51.2) %>%
+  filter(LatCentroid < 53.1)
+```
+
+We have now our random centroid locations. 
+Let's visualize our data. 
+
+```{r message = FALSE, warning = FALSE, fig.align = 'left'}
+
+p <- ggmap(mapNL, extent = 'device') +
+  geom_point(data = ChessClubs20162017, aes(Long, Lat), color = "blue") + 
+  geom_point(data = centroid_locations, aes(x = LongCentroid, y = LatCentroid), color = "red", alpha = 0.5, shape = 17) +
+  scale_x_continuous(limits = c(minLong, maxLong)) +
+  scale_y_continuous(limits = c(minLat, maxLat)) 
+
+p + 
+#  geom_label_repel(data = centroid_locations, aes(x = LongCentroid, y = LatCentroid, label=as.character(IdCentroid)), box.padding #= 0.25, point.padding = 0.3, segment.color = 'grey50') +
+  ggtitle("'Warehouse' location problem for Chess League Cup", "Blue dots are clubs, Light red triangles show potential centers.")
+
+```
+
+
+The suggested centroid locations look reasonable.
+
+
+## DistanceMatrix
+
+We are almost ready, to start crafting the optimization model.
+But it is a handy to make an initial Distance Matrix and not calculate again and again in the model optimization function.
+A squared distance is used as a distance measure. So it tries too limit larger distances.
+The distance function is not the driving distance though (this could be sort of *geocoded* as well).
+
+```{r}
+centroidLoc <- nrow(centroid_locations)
+m1 <- as.matrix(ChessClubs20162017[,c("Long", "Lat")])
+m2 <- as.matrix(centroid_locations[,c("LongCentroid", "LatCentroid")])
+md2 <- distm(m1, m2)
+
+distanceCost2 <- function(i, j) {
+  md2[i,j]^2
+}
+
+centroid_locations$Id <- row_number(centroid_locations$IdCentroid) #As some point locations are removed, create a new Id field
+cl <- centroidLoc #a small variable names helps too read the model
+
+rm(m1, m2, centroidLoc, df1, df2, df3, df4, deltaLong, deltaLat) #cleanup
+```
+
+
+## Model
+
+Finally! The model is easy to read and understand. 
+It was one of the reasons for choosing this package.
+
+```{r cache = TRUE}
+model4 <- MIPModel() %>%
+  # 1 if i gets assigned to centroid_location j otherwise 0
+  add_variable(x[i, j], i = 1:n, j = 1:cl, type = "binary") %>%
+  
+  #the centroid locations (dummy variable)
+  add_variable(u[j], j = 1:cl, type = "binary") %>%
+  
+  #exactly 4 groups are allowed
+  add_constraint(sum_expr(u[j], j = 1:cl) == 4) %>% 
+  
+  #minimize squared distance cost
+  set_objective(sum_expr(distanceCost2(i, j) * x[i, j], i = 1:n, j = 1:cl), "min") %>%
+
+  # every chessclub needs to be assigned to exactly one group
+  add_constraint(sum_expr(x[i, j], j = 1:cl) == 1, i = 1:n) %>% 
+
+  # each of the 4 groups has to be of equal size
+  add_constraint(sum_expr(x[i, j], i = 1:n) >= gMin * u[j], j = 1:cl) %>%
+  add_constraint(sum_expr(x[i, j], i = 1:n) <= gMax * u[j], j = 1:cl) %>%
+  
+  #each of the 4 groups has to be of equal strength
+  add_constraint(sum_expr(x[i, j] * weightLevel[i], i = 1:n) >= minTotalWeight * u[j], j = 1:cl) %>%
+  add_constraint(sum_expr(x[i, j] * weightLevel[i], i = 1:n) <= maxTotalWeight * u[j], j = 1:cl)
+
+#Lets inspect the model created
+model4
+
+```
+Now we run the model using the glpk solver
+
+```{r cache = TRUE}
+result4 <- solve_model(model4, with_ROI(solver = "glpk", verbose = TRUE))
+```
+```{r}
+#choosen centroid locations
+selected_centroid <- result4 %>% 
+  get_solution(u[j]) %>%
+  filter(value > 0) %>%
+  select(j)
+
+
+#Take group assignments
+matching <- result4 %>% 
+  get_solution(x[i,j]) %>%
+  filter(value > 0) %>%  
+  select(i, j)
+
+```
+
+
+Now we integrate the results and visualize the results.
+
+```{r warning = FALSE, fig.align = 'left'}
+
+plot_assignment <- matching %>% 
+  inner_join(ChessClubs20162017, by = c("i" = "Id")) %>% 
+  inner_join(centroid_locations, by = c("j" = "Id"))
+
+p + 
+  geom_segment(aes(x = LongCentroid, y = LatCentroid, xend = Long, yend = Lat), data = plot_assignment) + 
+  geom_point(aes(x = LongCentroid, y = LatCentroid), data = centroid_locations[centroid_locations$Id %in% selected_centroid$j, ], color = "red", size = 3, shape = 17) +
+
+  ggtitle("Optimal groups for the Chess League Cup",
+          "Based on the possible centroid locations. 
+Big red triangles show the 4 selected centroid locations. 
+Light red are unused centroid locations, blue dots represent chessclubs.")
+
+```
+**And no, we still don't have mountains here**
+
+
+The results look like an improvement. Let's compare the results in Power BI.
+Therefor we first need to export the results.
+Export the data to csv.
+
+```{r}
+
+#Some reordering and export
+ChessClubs20162017New <- matching %>% 
+  inner_join(ChessClubs20162017, by = c("i" = "Id"))
+
+ChessClubs20162017New <- rename(ChessClubs20162017New, Id = i)
+
+jGroups <- sort(unique(ChessClubs20162017New$j))
+ChessClubs20162017New$BekerNew <- mapvalues(ChessClubs20162017New$j, from = jGroups, to = c("A", "B", "C", "D"))
+ChessClubs20162017New$j <- NULL
+
+write.csv(ChessClubs20162017New, file = "output\\leagueChessClub.csv")
+
+```
+
+
+## Power BI
+
+The results in Power BI
+![an image caption Source: Power BI Optimization Results](images/PowerBI_OptimizationResults.png) 
+**Comparison in Power BI**
+
+Well it seems my gutfeeling was about right. The average distance dropped with almost 10 km (20 km for roundtrip).
+Ok, the club in province North Holland need to use some bridges, but that seems acceptable.
+Everything appears better, apart from the SD Weight. It is a little higher for 1 group. This indicates there are more strong and weak teams compared tp the other groups. I think this is acceptable as well.
+
+
+These statistics are created using DAX (measures), the most interesting is the DistanceAvg and Distance2Avg (squared) measures.
+They provide the average distance between the selected clubs (within the group in this case). In DAX we can do this in the following way:
+
+~~~~~~~   
+DistanceAvg = AVERAGEX( 
+	FILTER(
+        CROSSJOIN(
+            SELECTCOLUMNS (	ChessLeagueCup; "Lat_1"; ChessLeagueCup[Lat]; "Long_1"; ChessLeagueCup[Long]; "ClubNaam1"; ChessLeagueCup[ClubNaam]);
+            SELECTCOLUMNS (	ChessLeagueCup; "Lat_2"; ChessLeagueCup[Lat]; "Long_2"; ChessLeagueCup[Long]; "ClubNaam2"; ChessLeagueCup[ClubNaam])
+	   );
+       [ClubNaam1] <> [ClubNaam2]
+    ); 
+    6371 *((2*ASIN(SQRT((SIN((RADIANS([Lat_1])-RADIANS([Lat_2]))/2)^2)+COS(RADIANS([Lat_1]))*COS(RADIANS([Lat_2]))*(SIN((RADIANS([Long_1])-RADIANS([Long_2]))/2)^2)))))
+)
+~~~~~~~
+It would have been nice if this can be added in a kind of UDF as now the formula is copied a couple of times.
+
+For completeness, the earlier mentioned KMeans (for insight) can be implemented in the Query Editor as follows.
+![an image caption Source: KMeans in Query Editor Power BI](images/RunR_QueryEditor_KMeans.png) 
+**KMeans in Power BI Query Editor**
+
+
+
+After all these analysis, reporting and writing, it is time to do some real calculations again and bring home that Cup ones more!
+
+You can view the Power BI report [here ](https://app.powerbi.com/view?r=eyJrIjoiZWIzOTBiYmEtMzc5OC00NmE0LWJhMWItMmQyMDAwNzlkMTgwIiwidCI6Ijg3NGM1MzA1LWI0MDktNGU5Ni04ODhiLTQ4ODViNWQ0ZDYwNiIsImMiOjl9).
+
+All the code can be found on GitHub [ChessLeagueCup](https://github.com/Ruud-Janssen/ChessLeagueCup).
