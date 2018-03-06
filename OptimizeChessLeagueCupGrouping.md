@@ -1,4 +1,7 @@
-In this article we investigate the pairings for the Chess League Cup in the Netherlands. I have some doubts about the classification of the groupings. We use different techniques to solve this optimization problem:
+Optimizing Chess League Cup Pairings
+================
+
+In this article we investigate the pairings for the Chess League Cup in the Netherlands (season 2016–2017). I have some doubts about the quality of the classification of the participating chessclubs in 4 groups. We use different techniques to solve this optimization problem:
 
 -   Power BI Visualization & Comparison
 
@@ -6,10 +9,14 @@ In this article we investigate the pairings for the Chess League Cup in the Neth
 
 -   SQL Server (Geocoding address Chessclubs)
 
+All the code is in Github, [ChessLeagueCup](https://github.com/Ruud-Janssen/ChessLeagueCup). You can view the Power BI report [here](https://app.powerbi.com/view?r=eyJrIjoiZWIzOTBiYmEtMzc5OC00NmE0LWJhMWItMmQyMDAwNzlkMTgwIiwidCI6Ijg3NGM1MzA1LWI0MDktNGU5Ni04ODhiLTQ4ODViNWQ0ZDYwNiIsImMiOjl9).
+
+All the code can be found on GitHub [ChessLeagueCup](https://github.com/Ruud-Janssen/ChessLeagueCup).
+
 Chess League Cup Explanation
 ----------------------------
 
-As with football there is a League Cup and the regular national competition in the Netherlands. Though the regular competition is a single round robin event of 10 teams. Just 9 games leaves plenty of time to play individual tournaments or multiple foreign league competitions. In the regular competition you play with 10 players in the highest 2 classes and with 8 players per team in the lower classes.
+As with football there is a League Cup and the regular national competition. Though the regular competition is a single round robin event of 10 teams. Just 9 games leaves plenty of time to play individual tournaments or multiple foreign league competitions. In the regular competition in the Netherlands you play with 10 players in the highest 2 classes and with 8 players per team in the lower classes.
 
 In the League Cup you play with 4 players often during the week on the regular chess club evening of the home playing team. The League cup is based on a knockout system where around 100 teams participate. The teams are divided in 4 groups and the winners of each group go to the finals where the cup winner will be decided.
 
@@ -32,7 +39,7 @@ What do we need:
 
 -   the group in the League Cup
 
-As usually I work with the Microsoft stack, that’s where we start.
+As usually I work with the Microsoft stack, at least that’s where we start.
 
 The first thing is to get the data of the chess clubs and optionally put it in a database, sql server. Unfortunately there is no webservice or something to get this data easily. I might could have asked for this data but I extracted the data from the website (at that point still [schaakbond.nl](www.schaakbond.nl) instead of the new website [schaken.nl](www.schaken.nl)).
 
@@ -100,28 +107,28 @@ The brief EDA gave some clues that improvement does not seem impossible. On the 
 
 Once again, my personal annoyance was that each year we play in group south, including some pretty far western clubs, while living in the east. More concretely, is the league cup already the optimal solution or is there a solution which is better in all relevant aspects. So what should we take into consideration:
 
--   average strength (based on national league class)
+-   Equal average strength (based on national league class)
 
--   group size (equal length over the groups)
+-   Group size (equal sized groups)
 
--   avg distance and avg squared distance in the group
+-   Average distance and/or average squared distance in the group
 
 Unfortunately, there is no magic button in Power BI to get the answer for this problem. Clustering algorithms have a different purpose, similarity, and cannot be used for this problem.
 
 The solution can be found in linear optimization type of problems. Math is certainly not my expertise area, but let’s see whether we can come up with some results. As a Microsoft guy nowadays you need to be savvy with R, so lets fire up R studio!
 
-I found a nice looking package from Dirk Schumacher, *OMPR*, Optimization Modelling Package. More information can be found [here](https://dirkschumacher.github.io/ompr/index.html). In general in works a bit like the package *Caret*, for Regression and Classification type of problems. It provides a universal front-end for many different optimization algorithms.
+I found a nice looking package from Dirk Schumacher, *OMPR*, Optimization Modelling Package. More information can be found [here](https://dirkschumacher.github.io/ompr/index.html). In general it works a bit like the package *Caret*, for Regression and Classification type of problems. It provides a universal front-end for many different optimization algorithms.
 
 R
 -
 
-After importing the data in R, we do a little preprocessing before building the model. In the specific year we have 93 clubs participating in the league cup. We set the number of groups to 4, and the size of the group to a minimum of 23 clubs and a maximum of 24 clubs. We use the same weight setting as in Power BI. But we add the maximum and minimum weight for a group to ensure equal strength groups.
+After importing the data in R, we do a little preprocessing before building the model. In the specific season we have 93 clubs participating in the league cup. We set the number of groups to 4, and the size of the group to a minimum of 23 clubs and a maximum of 24 clubs. We use the same weight setting as in Power BI. But we add the maximum and minimum weight for a group to ensure equal strength groups.
 
 At development time I used a subset, for example 20 clubs and 4 groups, to quickly test the solution. I played a bit with the *OMPR* package and tried different approaches to solve the problem.
 
 Some less successful attempts have been tried with different models. They are within R script *Optimize ChessLeagueCupGroupings.R* in GitHub. One of the attempts was the famous TSP, Traveling Salesman Problem. It wasn’t particularly successful as the problem space grew massively. But the idea was to have 4 chains of clubs equal in size and strength. Unfortunately, testing it with just 20 cities already took too long, while with 10 cities and 2 groups it was ok.
 
-Here we look into the final model. But first the preprocessing.
+In this article we only examine final model. But first the preprocessing.
 
 ``` r
 #rm(list=setdiff(ls(), "mapNL"))
@@ -147,7 +154,7 @@ In the preprocessing we load the data from the already geocoded chessclubs, csv 
 source("Preprocessing ChessLeagueCup.R")
 ```
 
-Create a map of the Netherlands (once).
+Create a basemap of the Netherlands once, and load it each time, see R script *loadRBaseMapOnce.R* at GitHub.
 
 ``` r
 load("output/mapNL.rda")
@@ -199,7 +206,7 @@ centroid_locations <- centroid_locations %>%
   filter(LatCentroid < 53.1)
 ```
 
-We have now our random centroid locations. Let's visualize our data.
+We now have the random centroid locations. Let's visualize our data.
 
 ``` r
 p <- ggmap(mapNL, extent = 'device') +
@@ -220,7 +227,7 @@ The suggested centroid locations look reasonable.
 DistanceMatrix
 --------------
 
-We are almost ready, to start crafting the optimization model. But it is a handy to make an initial Distance Matrix and not calculate again and again in the model optimization function. A squared distance is used as a distance measure. So it tries too limit larger distances. The distance function is not the driving distance though (this could be sort of *geocoded* as well).
+We are almost ready to start crafting the optimization model. But it is a handy to make an initial Distance Matrix and not calculate again and again in the model optimization function. A squared distance is used as a distance measure. So it tries too limit larger distances. The distance function is not the driving distance though (this could be sort of *geocoded* as well).
 
 ``` r
 centroidLoc <- nrow(centroid_locations)
