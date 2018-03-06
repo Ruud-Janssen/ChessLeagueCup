@@ -144,7 +144,7 @@ Unfortunately, testing it with just 20 cities already took too long, while with 
 Here we look into the final model. But first the preprocessing.
 
 ```{r message = FALSE, warning = FALSE}
-rm(list=setdiff(ls(), "mapNL"))
+#rm(list=setdiff(ls(), "mapNL"))
 
 library(ompr)
 library(ROI.plugin.glpk)
@@ -222,7 +222,7 @@ centroid_locations <- centroid_locations %>%
 We have now our random centroid locations. 
 Let's visualize our data. 
 
-```{r message = FALSE, warning = FALSE, fig.align = 'left'}
+```{r message = FALSE, warning = FALSE}
 
 p <- ggmap(mapNL, extent = 'device') +
   geom_point(data = ChessClubs20162017, aes(Long, Lat), color = "blue") + 
@@ -369,7 +369,7 @@ matching <- result4 %>%
 
 Now we integrate the results and visualize the results.
 
-```{r warning = FALSE, fig.align = 'left'}
+```{r warning = FALSE}
 
 plot_assignment <- matching %>% 
   inner_join(ChessClubs20162017, by = c("i" = "Id")) %>% 

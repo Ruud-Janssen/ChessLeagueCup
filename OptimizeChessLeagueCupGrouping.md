@@ -1,6 +1,3 @@
-Chess League Cup Pairings in the Netherlands
-================
-
 In this article we investigate the pairings for the Chess League Cup in the Netherlands. I have some doubts about the classification of the groupings. We use different techniques to solve this optimization problem:
 
 -   Power BI Visualization & Comparison
@@ -127,7 +124,7 @@ Some less successful attempts have been tried with different models. They are wi
 Here we look into the final model. But first the preprocessing.
 
 ``` r
-rm(list=setdiff(ls(), "mapNL"))
+#rm(list=setdiff(ls(), "mapNL"))
 
 library(ompr)
 library(ROI.plugin.glpk)
